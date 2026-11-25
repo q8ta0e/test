@@ -88,6 +88,10 @@ pub struct Editor {
     pub editing_save_name: bool,
     /// Whether the custom profile description field is actively focused.
     pub editing_save_desc: bool,
+    /// Current custom button label being edited with the Android text keyboard.
+    pub custom_label_input: String,
+    /// True while the custom button label field owns keyboard text input.
+    pub editing_custom_label: bool,
     /// True when the Editor Save Dialog (Option A: Replace existing preset, Option B: Create new preset as...) is open.
     pub save_dialog_open: bool,
     /// A naming field was tapped: the game opens the system keyboard.
@@ -143,12 +147,34 @@ impl TouchControls {
             },
             editing_save_name: false,
             editing_save_desc: false,
+            custom_label_input: String::new(),
+            editing_custom_label: false,
             save_dialog_open: false,
             keyboard_request: false,
             save_create_new_mode: is_default,
             back_confirm_open: false,
         });
     }
+    /// Commit the active custom-button name field into the selected button.
+    /// Called after Android soft/hardware keyboard output has updated the editor buffer.
+    pub fn sync_editor_custom_label(&mut self) -> bool {
+        let Some((index, label)) = self.editor.as_ref().and_then(|e| {
+            e.selected_custom
+                .map(|index| (index, e.custom_label_input.trim().to_owned()))
+        }) else {
+            return false;
+        };
+        let Some(button) = self.settings.custom_buttons.get_mut(index) else {
+            return false;
+        };
+        if button.custom_label == label {
+            return false;
+        }
+        button.custom_label = label;
+        // Persist when the editor's Done action is used; Cancel can still restore the snapshot.
+        true
+    }
+
     pub fn cancel_editor_gesture(&mut self) {
         if let Some(editor) = &mut self.editor {
             editor.drag = None;
@@ -174,6 +200,11 @@ impl TouchControls {
         let Some(e) = self.editor.as_mut() else {
             return true;
         };
+        if e.editing_custom_label {
+            e.editing_custom_label = false;
+            e.keyboard_request = false;
+            return false;
+        }
         if e.picker_step != PickerStep::None {
             e.picker_step = PickerStep::None;
             return false;
