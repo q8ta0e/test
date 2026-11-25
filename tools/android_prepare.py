@@ -63,7 +63,8 @@ def download_game(version, directory):
     # and client/server jar hashes are checked against the engine pins below.
     versions = directory / 'versions' / version
     manifest_path = versions / f'{version}.json'
-    lab.download(entry['url'], manifest_path, entry['sha1'])
+    pinned_sha1 = '11f1aefe473eefba0af62e3286c33b692807b2eb'
+    lab.download(f'https://piston-meta.mojang.com/v1/packages/{pinned_sha1}/{version}.json', manifest_path, pinned_sha1)
     manifest = json.loads(manifest_path.read_text())
     files = []
     for side in ['client', 'server']:
