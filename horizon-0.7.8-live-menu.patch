@@ -1,0 +1,93 @@
+--- a/crates/horizon-client/src/game.rs
++++ b/crates/horizon-client/src/game.rs
+@@ -7713,25 +7713,34 @@
+     }
+     /// `Minecraft.pause`: a single-player game with a pausing screen open.
+     fn pauses_game(&self) -> bool {
+-        self.has_singleplayer_server()
+-            && !self.is_published()
+-            && self.title.is_none()
+-            && (matches!(
+-                self.screen,
+-                Screen::Paused
+-                    | Screen::Options
+-                    | Screen::Stats
+-                    | Screen::Advancements
+-                    | Screen::WorldOptions
+-                    | Screen::Friends
+-                    | Screen::ServerLinks
+-                    | Screen::ConfirmLink
+-                    | Screen::DialogWarning
+-                    | Screen::CommandBlock
+-                    | Screen::DebugOptions
+-            ) || self.book.is_some()
+-                || self.win_screen_pauses()
+-                || self.touch_editing())
++        // Android: keep an integrated single-player world ticking behind menus.
++        // Lifecycle suspension still pauses it through `sync_server_pause`.
++        #[cfg(target_os = "android")]
++        {
++            false
++        }
++        #[cfg(not(target_os = "android"))]
++        {
++            self.has_singleplayer_server()
++                && !self.is_published()
++                && self.title.is_none()
++                && (matches!(
++                    self.screen,
++                    Screen::Paused
++                        | Screen::Options
++                        | Screen::Stats
++                        | Screen::Advancements
++                        | Screen::WorldOptions
++                        | Screen::Friends
++                        | Screen::ServerLinks
++                        | Screen::ConfirmLink
++                        | Screen::DialogWarning
++                        | Screen::CommandBlock
++                        | Screen::DebugOptions
++                ) || self.book.is_some()
++                    || self.win_screen_pauses()
++                    || self.touch_editing())
++        }
+     }
+     /// A screen open over gameplay while `screen` stays `Playing`: a book or
+     /// lectern, a sign, a server dialog, the code of conduct, a link or
+@@ -14931,29 +14940,17 @@
+         // Load the profile's scheme before drawing the first frame or outline.
+         #[cfg(target_os = "android")]
+         self.pad.touch.viewport(size[0], size[1]);
+-        let raw_menu_blur = self.menu_blur();
++        // Keep the world live behind Android overlays. The previous stationary-overlay
++        // cache reused a single frame while Inventory, Chat, or another screen was open,
++        // making the world appear frozen even though the UI event loop continued.
++        let menu_blur = self.menu_blur();
+         #[cfg(target_os = "android")]
+-        let in_world_stationary_overlay = !self.shows_panorama()
+-            && self.player.is_some()
+-            && !self.pad.touch_ui.floating_menu
+-            && (self.singleplayer_paused()
+-                || self.screen != Screen::Playing
+-                || self.pad.touch.editor.is_some())
+-            && (self.singleplayer_paused()
+-                || self.pad.touch.editor.is_some()
+-                || self.pad.touch.state().left == [0.0, 0.0]);
++        let menu_blur_cache = false;
+         #[cfg(not(target_os = "android"))]
+-        let in_world_stationary_overlay = false;
+-        let menu_blur = if in_world_stationary_overlay {
+-            raw_menu_blur.or(Some(0.0))
+-        } else {
+-            raw_menu_blur
+-        };
+         let menu_blur_cache = ((self.singleplayer_paused() || self.screen == Screen::Options)
+             && !self.shows_panorama()
+-            && menu_blur.is_some())
+-            || in_world_stationary_overlay;
+-        if !menu_blur_cache || !self.was_menu_blurred {
++            && menu_blur.is_some());
++        if menu_blur_cache != self.was_menu_blurred {
+             if let Some(renderer) = self.renderer.as_mut() {
+                 renderer.invalidate_menu_blur();
+             }

@@ -1,0 +1,15 @@
+Horizon / Starling Extras 0.7.8 — Android live-menu source patch
+Target: Android ARM64-v8a build (Rust target aarch64-linux-android).
+
+Changes in crates/horizon-client/src/game.rs:
+1. On Android, disables single-player menu pausing. Integrated single-player worlds continue
+   ticking behind Inventory, Chat, Pause, Options, and other in-game screens.
+2. On Android, disables stationary-overlay/menu-background frame caching. The world is
+   rendered each frame behind menus rather than reusing a cached frame.
+3. Keeps lifecycle safety: Android backgrounding/surface loss still pauses the integrated
+   server through sync_server_pause. Focus-loss handling is otherwise unchanged.
+4. Non-Android pause and menu-blur-cache behavior is retained.
+
+This is a SOURCE PATCH, not a compiled .so/APK. Rebuild the 0.7.8 project for
+aarch64-linux-android / arm64-v8a to obtain the native library. Test single-player menus,
+background/resume, and multiplayer before daily use.
