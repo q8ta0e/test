@@ -7713,34 +7713,25 @@ impl Game<'_> {
     }
     /// `Minecraft.pause`: a single-player game with a pausing screen open.
     fn pauses_game(&self) -> bool {
-        // Android: keep an integrated single-player world ticking behind menus.
-        // Lifecycle suspension still pauses it through `sync_server_pause`.
-        #[cfg(target_os = "android")]
-        {
-            false
-        }
-        #[cfg(not(target_os = "android"))]
-        {
-            self.has_singleplayer_server()
-                && !self.is_published()
-                && self.title.is_none()
-                && (matches!(
-                    self.screen,
-                    Screen::Paused
-                        | Screen::Options
-                        | Screen::Stats
-                        | Screen::Advancements
-                        | Screen::WorldOptions
-                        | Screen::Friends
-                        | Screen::ServerLinks
-                        | Screen::ConfirmLink
-                        | Screen::DialogWarning
-                        | Screen::CommandBlock
-                        | Screen::DebugOptions
-                ) || self.book.is_some()
-                    || self.win_screen_pauses()
-                    || self.touch_editing())
-        }
+        self.has_singleplayer_server()
+            && !self.is_published()
+            && self.title.is_none()
+            && (matches!(
+                self.screen,
+                Screen::Paused
+                    | Screen::Options
+                    | Screen::Stats
+                    | Screen::Advancements
+                    | Screen::WorldOptions
+                    | Screen::Friends
+                    | Screen::ServerLinks
+                    | Screen::ConfirmLink
+                    | Screen::DialogWarning
+                    | Screen::CommandBlock
+                    | Screen::DebugOptions
+            ) || self.book.is_some()
+                || self.win_screen_pauses()
+                || self.touch_editing())
     }
     /// A screen open over gameplay while `screen` stays `Playing`: a book or
     /// lectern, a sign, a server dialog, the code of conduct, a link or
@@ -14940,17 +14931,32 @@ impl Game<'_> {
         // Load the profile's scheme before drawing the first frame or outline.
         #[cfg(target_os = "android")]
         self.pad.touch.viewport(size[0], size[1]);
-        // Keep the world live behind Android overlays. The previous stationary-overlay
-        // cache reused a single frame while Inventory, Chat, or another screen was open,
-        // making the world appear frozen even though the UI event loop continued.
-        let menu_blur = self.menu_blur();
+        let raw_menu_blur = self.menu_blur();
         #[cfg(target_os = "android")]
-        let menu_blur_cache = false;
+        let in_world_stationary_overlay = !self.shows_panorama()
+            && self.player.is_some()
+            && !self.pad.touch_ui.floating_menu
+            // Keep the live world rendering behind non-pausing screens (inventory, chat,
+            // creative inventory, multiplayer pause menu, etc.). Only cache a stationary
+            // overlay when the integrated singleplayer is genuinely paused or touch layout
+            // editing is active.
+            && (self.singleplayer_paused()
+                || self.pad.touch.editor.is_some())
+            && (self.singleplayer_paused()
+                || self.pad.touch.editor.is_some()
+                || self.pad.touch.state().left == [0.0, 0.0]);
         #[cfg(not(target_os = "android"))]
+        let in_world_stationary_overlay = false;
+        let menu_blur = if in_world_stationary_overlay {
+            raw_menu_blur.or(Some(0.0))
+        } else {
+            raw_menu_blur
+        };
         let menu_blur_cache = ((self.singleplayer_paused() || self.screen == Screen::Options)
             && !self.shows_panorama()
-            && menu_blur.is_some());
-        if menu_blur_cache != self.was_menu_blurred {
+            && menu_blur.is_some())
+            || in_world_stationary_overlay;
+        if !menu_blur_cache || !self.was_menu_blurred {
             if let Some(renderer) = self.renderer.as_mut() {
                 renderer.invalidate_menu_blur();
             }
@@ -16662,7 +16668,7 @@ impl Game<'_> {
                 .touch
                 .editor
                 .as_ref()
-                .is_some_and(|e| e.save_dialog_open)
+                .is_some_and(|e| e.save_dialog_open || e.editing_custom_label)
                 || self.pad.touch_ui.preset_dialog.is_some())
         {
             if let PhysicalKey::Code(code) = event.physical_key {
@@ -16673,6 +16679,9 @@ impl Game<'_> {
                         self.pad.touch_ui.preset_dialog.as_mut(),
                         &out,
                     );
+                    if self.pad.touch.sync_editor_custom_label() {
+                        self.settings.touch = self.pad.touch.settings.clone();
+                    }
                     if horizon_client::touch_ui::output_dismisses(&out) {
                         crate::platform::hide();
                     }
@@ -16688,6 +16697,9 @@ impl Game<'_> {
                     self.pad.touch_ui.preset_dialog.as_mut(),
                     &out,
                 );
+                if self.pad.touch.sync_editor_custom_label() {
+                    self.settings.touch = self.pad.touch.settings.clone();
+                }
                 if horizon_client::touch_ui::output_dismisses(&out) {
                     crate::platform::hide();
                 }

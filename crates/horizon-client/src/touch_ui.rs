@@ -232,43 +232,69 @@ pub fn output_dismisses(out: &Output) -> bool {
     )
 }
 
-/// Applies an on-screen or hardware keyboard `Output` event to an active Control Editor
-/// Save Preset dialog or Floating Menu Copy/Edit Preset dialog.
+/// Applies on-screen or hardware keyboard output to the Control Editor's custom button name,
+/// Save Preset dialog, or Floating Menu Copy/Edit Preset dialog.
 pub fn apply_editor_or_preset_output(
-    ed: Option<&mut crate::touch::Editor>,
+    mut ed: Option<&mut crate::touch::Editor>,
     preset_dlg: Option<&mut PresetDialogState>,
     out: &Output,
 ) -> bool {
-    if let Some(ed) = ed
-        && ed.save_dialog_open
-    {
-        let max_len = if ed.editing_save_desc { 48 } else { 28 };
-        let target = if ed.editing_save_desc {
-            &mut ed.save_desc_input
-        } else {
-            &mut ed.save_name_input
-        };
-        match out {
-            Output::Text(s) => {
-                for ch in s.chars() {
-                    if !ch.is_control() && target.chars().count() < max_len {
+    if let Some(editor) = ed.as_deref_mut() {
+        if editor.editing_custom_label {
+            match out {
+                Output::Text(s) => {
+                    for ch in s.chars() {
+                        if !ch.is_control() && editor.custom_label_input.chars().count() < 24 {
+                            editor.custom_label_input.push(ch);
+                        }
+                    }
+                }
+                Output::Backspace | Output::Key(KeyCode::Backspace) => {
+                    editor.custom_label_input.pop();
+                }
+                Output::Enter | Output::Close | Output::Key(KeyCode::Enter | KeyCode::Escape) => {
+                    editor.editing_custom_label = false;
+                    editor.keyboard_request = false;
+                }
+                Output::Key(code) => {
+                    if let Some(ch) = key_code_to_char(*code)
+                        && editor.custom_label_input.chars().count() < 24
+                    {
+                        editor.custom_label_input.push(ch);
+                    }
+                }
+            }
+            return true;
+        }
+        if editor.save_dialog_open {
+            let max_len = if editor.editing_save_desc { 48 } else { 28 };
+            let target = if editor.editing_save_desc {
+                &mut editor.save_desc_input
+            } else {
+                &mut editor.save_name_input
+            };
+            match out {
+                Output::Text(s) => {
+                    for ch in s.chars() {
+                        if !ch.is_control() && target.chars().count() < max_len {
+                            target.push(ch);
+                        }
+                    }
+                }
+                Output::Backspace | Output::Key(KeyCode::Backspace) => {
+                    target.pop();
+                }
+                Output::Enter | Output::Close | Output::Key(KeyCode::Enter | KeyCode::Escape) => {}
+                Output::Key(code) => {
+                    if let Some(ch) = key_code_to_char(*code)
+                        && target.chars().count() < max_len
+                    {
                         target.push(ch);
                     }
                 }
             }
-            Output::Backspace | Output::Key(KeyCode::Backspace) => {
-                target.pop();
-            }
-            Output::Enter | Output::Close | Output::Key(KeyCode::Enter | KeyCode::Escape) => {}
-            Output::Key(code) => {
-                if let Some(ch) = key_code_to_char(*code)
-                    && target.chars().count() < max_len
-                {
-                    target.push(ch);
-                }
-            }
+            return true;
         }
-        return true;
     }
     if let Some(dlg) = preset_dlg {
         let max_len = if dlg.editing_desc { 48 } else { 28 };
@@ -301,6 +327,7 @@ pub fn apply_editor_or_preset_output(
     }
     false
 }
+
 struct RelativeTouch {
     id: u64,
     origin: [f32; 2],
@@ -4241,12 +4268,17 @@ fn draw_m3_selector_cell(
         12.0,
         accent_soft,
     );
+    let display_value = if title == "Button Name" {
+        if value.trim().is_empty() { "Tap to type".to_owned() } else { value.to_owned() }
+    } else {
+        format!("‹  {value}  ›")
+    };
     ui.centered_fit(
         Face::SemiBold,
         9.6,
         [pill_r[0] + 6.0, pill_r[1], pill_r[2] - 12.0, pill_r[3]],
         accent,
-        &format!("‹  {value}  ›"),
+        &display_value,
     );
     let _ = text_c;
 }
@@ -5462,7 +5494,7 @@ pub fn draw_hud_editor(
                     draw_m3_selector_cell(
                         &mut ui,
                         [wx + 12.0 + (cw3 + 8.0) * 2.0, cards_y, cw3, card_h],
-                        "Hint Label",
+                        "Button Name",
                         &cur_hint,
                         st_cyan,
                         st_cyan_soft,
@@ -7347,26 +7379,15 @@ pub fn touch_hud_editor(
                                     });
                                 }
                                 _ => {
-                                    if let Some(idx) = ed.selected_custom {
-                                        let hints = [
-                                            "PRI", "SEC", "JUMP", "SNEAK", "SPRINT", "INV", "SWAP",
-                                            "DROP", "CHAT", "DEBUG", "3RD", "MOUSE", "MACRO",
-                                            "CLICK",
-                                        ];
-                                        if let Some(btn) = tc.settings.custom_buttons.get_mut(idx) {
-                                            let n = hints.len();
-                                            let cur = btn.custom_label.trim();
-                                            let pos = match hints
-                                                .iter()
-                                                .position(|h| h.eq_ignore_ascii_case(cur))
-                                            {
-                                                Some(i) if sign < 0.0 => (i + n - 1) % n,
-                                                Some(i) => (i + 1) % n,
-                                                None if sign < 0.0 => n - 1,
-                                                None => 0,
-                                            };
-                                            btn.custom_label = hints[pos].to_owned();
-                                        }
+                                    if let Some(idx) = ed.selected_custom
+                                        && let Some(btn) = tc.settings.custom_buttons.get(idx)
+                                    {
+                                        ed.custom_label_input = btn.custom_label.clone();
+                                        ed.editing_custom_label = true;
+                                        ed.keyboard_request = true;
+                                        ed.status_msg = Some(
+                                            "Enter a custom button name; press Enter when finished.".into(),
+                                        );
                                     }
                                 }
                             }
