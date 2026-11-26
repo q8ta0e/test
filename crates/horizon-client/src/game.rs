@@ -90,16 +90,16 @@ mod basic_hud_pickup_data;
 mod visuality_horizon;
 #[cfg(target_os = "android")]
 #[path = "../../../mods/official/appleskin/mixins/appleskin/runtime.rs"]
-mod mod_appleskin;
+mod official_appleskin;
 #[cfg(target_os = "android")]
 #[path = "../../../mods/official/appleskin/mixins/appleskin/icons.rs"]
-mod mod_appleskin_icon;
+mod official_appleskin_icons;
 #[cfg(target_os = "android")]
 #[path = "../../../mods/official/appleskin/mixins/appleskin/hunger.rs"]
-mod mod_appleskin_hunger;
+mod official_appleskin_hunger;
 #[cfg(target_os = "android")]
 #[path = "../../../mods/official/appleskin/mixins/appleskin/bar.rs"]
-mod mod_appleskin_bar;
+mod official_appleskin_bar;
 #[cfg(target_os = "android")]
 #[path = "../../../mods/official/freecam/mixins/freecam/runtime.rs"]
 mod freecam;
