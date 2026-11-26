@@ -5884,7 +5884,7 @@ impl Launcher {
             Some(Action::WorldFiles) => {
                 let id = crate::document_store::folder_id(self.catalog.config.profile, "worlds");
                 self.catalog.status = if crate::platform::open_documents(&id) {
-                    "In Android Files, select a complete world folder, then Copy to a folder you choose.
+                    "In Android Files, select a complete world folder, then Copy to a folder you choose."
                 } else { "Open system Files > Horizon Android > Worlds. Copy complete world folders while the game is closed." }.into();
             }
             Some(Action::WorkerLimit) => self.open_chooser(chooser::Kind::WorkerLimit),
