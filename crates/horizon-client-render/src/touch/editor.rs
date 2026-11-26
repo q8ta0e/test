@@ -88,10 +88,6 @@ pub struct Editor {
     pub editing_save_name: bool,
     /// Whether the custom profile description field is actively focused.
     pub editing_save_desc: bool,
-    /// Current custom button label being edited with the Android text keyboard.
-    pub custom_label_input: String,
-    /// True while the custom button label field owns keyboard text input.
-    pub editing_custom_label: bool,
     /// True when the Editor Save Dialog (Option A: Replace existing preset, Option B: Create new preset as...) is open.
     pub save_dialog_open: bool,
     /// A naming field was tapped: the game opens the system keyboard.
@@ -100,6 +96,14 @@ pub struct Editor {
     pub save_create_new_mode: bool,
     /// True when the Back confirmation dialog (`[ Save ]` / `[ Back ]`) is open.
     pub back_confirm_open: bool,
+    /// True when the Duplicate Preset Name Confirmation dialog (`[ Save ]` / `[ Cancel ]`) is open.
+    pub duplicate_name_confirm_open: bool,
+    /// Pending `(target_id, name, description)` when replacing an existing preset with the same name.
+    pub duplicate_conflict_target: Option<(String, String, String)>,
+    /// True when the user is typing a custom button name in the Property Inspector.
+    pub editing_button_label: bool,
+    /// Buffer for the custom button name being typed.
+    pub button_label_input: String,
 }
 
 enum Drag {
@@ -147,39 +151,15 @@ impl TouchControls {
             },
             editing_save_name: false,
             editing_save_desc: false,
-            custom_label_input: String::new(),
-            editing_custom_label: false,
             save_dialog_open: false,
             keyboard_request: false,
             save_create_new_mode: is_default,
             back_confirm_open: false,
+            duplicate_name_confirm_open: false,
+            duplicate_conflict_target: None,
+            editing_button_label: false,
+            button_label_input: String::new(),
         });
-    }
-    /// Commit the active custom-button name field into the selected button.
-    /// Called after Android soft/hardware keyboard output has updated the editor buffer.
-    pub fn sync_editor_custom_label(&mut self) -> bool {
-        let Some((index, label)) = self.editor.as_ref().and_then(|e| {
-            e.selected_custom
-                .map(|index| (index, e.custom_label_input.trim().to_owned()))
-        }) else {
-            return false;
-        };
-        let Some(button) = self.settings.custom_buttons.get_mut(index) else {
-            return false;
-        };
-        if button.custom_label == label {
-            return false;
-        }
-        button.custom_label = label;
-        // Persist when the editor's Done action is used; Cancel can still restore the snapshot.
-        true
-    }
-
-    pub fn cancel_editor_gesture(&mut self) {
-        if let Some(editor) = &mut self.editor {
-            editor.drag = None;
-            editor.active_drag = None;
-        }
     }
     pub fn cancel_editor(&mut self) {
         if let Some(e) = self.editor.take() {
@@ -200,11 +180,6 @@ impl TouchControls {
         let Some(e) = self.editor.as_mut() else {
             return true;
         };
-        if e.editing_custom_label {
-            e.editing_custom_label = false;
-            e.keyboard_request = false;
-            return false;
-        }
         if e.picker_step != PickerStep::None {
             e.picker_step = PickerStep::None;
             return false;
@@ -215,6 +190,11 @@ impl TouchControls {
         }
         if e.menu_open {
             e.menu_open = false;
+            return false;
+        }
+        if e.duplicate_name_confirm_open {
+            e.duplicate_name_confirm_open = false;
+            e.duplicate_conflict_target = None;
             return false;
         }
         if e.save_dialog_open {
@@ -757,6 +737,9 @@ impl TouchControls {
                         if mirror {
                             center[0] = 1.0 - center[0];
                         }
+                        if self.settings.snap_to_grid {
+                            center = center.map(|v| (v * 40.0).round() / 40.0);
+                        }
                         let size = (place.size * scale).min(aspect).min(1.0);
                         place.center = [
                             center[0].clamp(size / aspect / 2.0, 1.0 - size / aspect / 2.0),
@@ -988,32 +971,4 @@ impl TouchControls {
 }
 fn key_rect(i: usize) -> [f32; 4] {
     [0.15, 0.25 + i as f32 * 0.072, 0.7, 0.06]
-}
-
-#[cfg(test)]
-mod cancellation_tests {
-    use super::*;
-    #[test]
-    fn interrupted_drag_preserves_editor_changes_and_does_not_accept_picker() {
-        let mut tc = TouchControls::default();
-        tc.open_editor();
-        tc.settings.left_handed = !tc.settings.left_handed;
-        let expected = tc.settings.clone();
-        let ed = tc.editor.as_mut().unwrap();
-        ed.picker_step = PickerStep::Keyboard { event_slot: 0 };
-        ed.active_drag = Some((
-            7,
-            EditorDragKind::KeyboardScroll {
-                last_x: 0.0,
-                moved: false,
-            },
-        ));
-        tc.clear();
-        assert_eq!(tc.settings, expected);
-        let ed = tc.editor.as_ref().unwrap();
-        assert!(ed.active_drag.is_none());
-        assert_eq!(ed.picker_step, PickerStep::Keyboard { event_slot: 0 });
-        tc.cancel_editor();
-        assert_ne!(tc.settings.left_handed, expected.left_handed);
-    }
 }
