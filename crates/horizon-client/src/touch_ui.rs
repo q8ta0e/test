@@ -7354,11 +7354,17 @@ pub fn touch_hud_editor(
                                             "CLICK",
                                         ];
                                         if let Some(btn) = tc.settings.custom_buttons.get_mut(idx) {
-                                            let pos = hints
+                                            let n = hints.len();
+                                            let cur = btn.custom_label.trim();
+                                            let pos = match hints
                                                 .iter()
-                                                .position(|h| *h == btn.custom_label)
-                                                .map(|idx_h| (idx_h + 1) % hints.len())
-                                                .unwrap_or(0);
+                                                .position(|h| h.eq_ignore_ascii_case(cur))
+                                            {
+                                                Some(i) if sign < 0.0 => (i + n - 1) % n,
+                                                Some(i) => (i + 1) % n,
+                                                None if sign < 0.0 => n - 1,
+                                                None => 0,
+                                            };
                                             btn.custom_label = hints[pos].to_owned();
                                         }
                                     }
