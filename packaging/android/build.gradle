@@ -1,14 +1,14 @@
 plugins { id 'com.android.application' version '8.11.1' }
 
 android {
-    namespace 'dev.horizon.android.preview'
+    namespace 'dev.horizon.android'
     compileSdk 35
     defaultConfig {
         applicationId providers.gradleProperty('appId').getOrElse('dev.horizon.android.preview')
         minSdk providers.gradleProperty('minSdk').getOrElse('28').toInteger()
         targetSdk 35
         versionCode providers.gradleProperty('devVersionCode').getOrElse('30').toInteger()
-        versionName '0.7.9' + (providers.gradleProperty('devVersionCode').isPresent() ? '-preview' : '')
+        versionName '0.7.9' + (providers.gradleProperty('devVersionCode').isPresent() ? '-dev.' + providers.gradleProperty('devBuild').get() : '')
         ndk { abiFilters providers.gradleProperty('abi').get() }
     }
     signingConfigs {
