@@ -1205,9 +1205,8 @@ impl Game<'_> {
             crate::platform::show(&initial);
         }
     }
-    /// Text from the Android keyboard while a preset naming field has focus.
-    /// Both naming dialogs (the editor's save-as and the hub's copy) type here
-    /// instead of showing a keyboard inside the dialog.
+    /// Text from the Android keyboard while a Control Editor or preset naming field has focus.
+    /// These fields use the Android system keyboard rather than an in-dialog keyboard.
     fn android_preset_typing(&mut self, out: &Output) -> bool {
         let handled = horizon_client::touch_ui::apply_editor_or_preset_output(
             self.pad.touch.editor.as_mut(),
@@ -1226,7 +1225,9 @@ impl Game<'_> {
         if let Some(ed) = self.pad.touch.editor.as_mut()
             && std::mem::take(&mut ed.keyboard_request)
         {
-            let text = if ed.editing_save_desc {
+            let text = if ed.editing_custom_label {
+                ed.custom_label_input.clone()
+            } else if ed.editing_save_desc {
                 ed.save_desc_input.clone()
             } else {
                 ed.save_name_input.clone()
@@ -1280,6 +1281,9 @@ impl Game<'_> {
                 }
             }
             if self.android_preset_typing(&out) {
+                if self.pad.touch.sync_editor_custom_label() {
+                    self.settings.touch = self.pad.touch.settings.clone();
+                }
                 continue;
             }
             let next_sign_line = self.sign_edit.is_some() && matches!(out, Output::Enter);
