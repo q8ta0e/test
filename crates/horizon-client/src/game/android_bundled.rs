@@ -4,6 +4,13 @@ use super::*;
 
 use super::native_hooks::*;
 
+#[cfg(target_os = "android")]
+include!("../../../../mods/official/appleskin/mixins/appleskin/list.rs");
+#[cfg(target_os = "android")]
+include!("../../../../mods/official/appleskin/mixins/appleskin/settings.rs");
+#[cfg(target_os = "android")]
+include!("../../../../mods/official/appleskin/mixins/appleskin/click.rs");
+
 
 #[cfg(target_os = "android")]
 include!("../../../../mods/official/basic-hud/mixins/basic_hud/list.rs");
@@ -260,7 +267,7 @@ pub(super) fn native_mods(game: &mut Game<'_>, mods: &mut Vec<NativeMod>) {
         smartf3_list::run(&mut *mods);
         accurate_block_placement_list::run(&mut *mods);
         connected_textures_list::run(&mut *mods);
-        super::mod_appleskin_glue::on_list(&mut *mods);
+        official_appleskin_listed(&mut *mods);
         armorhud_listed(&mut *mods);
         jade_listed(&mut *mods);
         resourcify_listed(&mut *mods);
@@ -292,7 +299,7 @@ pub(super) fn native_settings(game: &mut Game<'_>, mod_id: &str, buttons: &mut V
         smartf3_settings::run(&mut *game, mod_id, &mut *buttons);
         accurate_block_placement_settings::run(&mut *game, mod_id, &mut *buttons);
         connected_textures_settings::run(mod_id, &mut *buttons);
-        super::mod_appleskin_glue::on_settings(&mut *game, mod_id, &mut *buttons);
+        official_appleskin_page(&mut *game, mod_id, &mut *buttons);
         super::freecam_hooks::settings(&mut *game, mod_id, &mut *buttons);
         super::waypoints_hooks::settings(&mut *game, mod_id, &mut *buttons);
         if mod_id == super::punchy::ID {
@@ -315,7 +322,7 @@ pub(super) fn native_settings_click(game: &mut Game<'_>, mod_id: &str, button: u
         smartf3_click::run(&mut *game, mod_id, button);
         accurate_block_placement_click::run(&mut *game, mod_id, button);
         connected_textures_click::run(mod_id, button);
-        super::mod_appleskin_glue::on_click(&mut *game, mod_id, button);
+        official_appleskin_click(&mut *game, mod_id, button);
         super::freecam_hooks::click(&mut *game, mod_id, button);
         super::waypoints_hooks::settings_click(&mut *game, mod_id, button);
         if mod_id == super::punchy::ID {
