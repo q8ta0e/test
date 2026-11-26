@@ -209,7 +209,7 @@ impl JoystickStyle {
             2.0
         };
         self.stick_opacity = if self.stick_opacity.is_finite() {
-            self.stick_opacity.clamp(0.0, 1.0)
+            self.stick_opacity.clamp(0.1, 1.0)
         } else {
             0.90
         };
@@ -224,7 +224,7 @@ impl JoystickStyle {
             2.0
         };
         self.base_opacity = if self.base_opacity.is_finite() {
-            self.base_opacity.clamp(0.0, 1.0)
+            self.base_opacity.clamp(0.1, 1.0)
         } else {
             0.72
         };
@@ -287,7 +287,7 @@ pub struct Placement {
     /// GoyControl Swipeable: sliding a finger from outside onto this button activates it.
     #[serde(default)]
     pub swipeable: bool,
-    /// Button shape: 0 = Rounded, 1 = Square (Sharp 0px), 2 = Round/Circle, 3 = CutOctagon, 4 = Diamond, 5 = Hexagon, 6 = Triangle.
+    /// Button shape: 0 = Rounded, 1 = Square, 2 = Circle/Pill, 3 = CutOctagon, 4 = Diamond, 5 = Hexagon.
     #[serde(default)]
     pub shape: u8,
     /// Optional vector icon badge (0 = None/Text only, 1..=12 = built-in vector icon).
@@ -387,7 +387,7 @@ impl Placement {
         }
         self.size = self.size.clamp(0.045, 0.45);
         self.opacity = self.opacity.clamp(0.0, 1.0);
-        self.shape = self.shape.min(6);
+        self.shape = self.shape.min(5);
         self.icon_id = self.icon_id.min(12);
         self.width_ratio = if self.width_ratio.is_finite() && self.width_ratio > 0.05 {
             self.width_ratio.clamp(0.4, 3.2)
@@ -463,8 +463,6 @@ pub struct Settings {
     pub virtual_mouse_enabled: bool,
     #[serde(default)]
     pub disable_game_animations: bool,
-    #[serde(default = "default_true")]
-    pub zero_latency_touch: bool,
     #[serde(default = "default_res_scale")]
     pub resolution_scale_percent: u32,
     pub virtual_mouse_sensitivity: f32,
@@ -485,8 +483,12 @@ pub struct Settings {
     pub dynamic_area_y: f32,
     #[serde(default)]
     pub auto_jump: bool,
-    #[serde(default)]
+    #[serde(default = "default_feedback_enabled")]
     pub vibrate: bool,
+    #[serde(default)]
+    pub ui_vibrate: bool,
+    #[serde(default = "default_feedback_enabled")]
+    pub show_control_hub: bool,
     #[serde(deserialize_with = "deserialize_visibility")]
     pub button_visibility: [u8; 14],
     pub horizontal_margin: f32,
@@ -513,9 +515,6 @@ pub struct Settings {
     pub floating_menu_pos: [f32; 2],
     #[serde(default)]
     pub snap_to_grid: bool,
-    /// Optional custom display names for the 14 built-in controls (empty = default Control::name()).
-    #[serde(default)]
-    pub control_labels: [String; 14],
     #[serde(deserialize_with = "deserialize_layouts")]
     pub layouts: [[Placement; 14]; 3],
 }
@@ -531,8 +530,11 @@ fn default_mcpe_preset_desc() -> String {
 fn default_goy_preset_desc() -> String {
     "Custom layout with more options".into()
 }
+fn default_feedback_enabled() -> bool {
+    true
+}
 fn default_floating_pos() -> [f32; 2] {
-    [0.02, 0.03]
+    [0.44, 0.05]
 }
 fn default_pointer_scale() -> f32 {
     1.0
@@ -618,7 +620,6 @@ impl Default for Settings {
             inventory_controls: false,
             virtual_mouse_enabled: false,
             disable_game_animations: false,
-            zero_latency_touch: true,
             resolution_scale_percent: default_res_scale(),
             virtual_mouse_sensitivity: 1.0,
             virtual_mouse_pointer_scale: default_pointer_scale(),
@@ -632,6 +633,8 @@ impl Default for Settings {
             dynamic_area_y: 1.0,
             auto_jump: false,
             vibrate: true,
+            ui_vibrate: false,
+            show_control_hub: true,
             button_visibility: [0; 14],
             horizontal_margin: 0.0,
             vertical_margin: 0.0,
@@ -646,7 +649,6 @@ impl Default for Settings {
             joystick_style: JoystickStyle::default(),
             floating_menu_pos: default_floating_pos(),
             snap_to_grid: false,
-            control_labels: std::array::from_fn(|_| String::new()),
             layouts,
         }
     }
@@ -768,11 +770,6 @@ impl Settings {
             if sprint.center == [0.13, 0.50] && (sprint.size - 0.105).abs() < 0.0001 {
                 sprint.center = [0.72, 0.78];
             }
-        }
-        if (s.floating_menu_pos[0] - 0.44).abs() < 0.001
-            && (s.floating_menu_pos[1] - 0.05).abs() < 0.001
-        {
-            s.floating_menu_pos = default_floating_pos();
         }
         s
     }
@@ -921,10 +918,13 @@ impl Settings {
             self.preset_name = self.preset_id.clone();
         }
         self.joystick_style.sanitize();
+        if self.floating_menu_pos == [0.44, 0.05] {
+            self.floating_menu_pos = default_floating_pos();
+        }
         for (i, v) in self.floating_menu_pos.iter_mut().enumerate() {
             let def = default_floating_pos()[i];
             *v = if v.is_finite() {
-                v.clamp(0.005, 0.96)
+                v.clamp(0.0, 0.94)
             } else {
                 def
             };
@@ -1247,8 +1247,9 @@ impl Settings {
         let prev_vm_sens = self.virtual_mouse_sensitivity;
         let prev_pointer_scale = self.virtual_mouse_pointer_scale;
         let prev_vibrate = self.vibrate;
+        let prev_ui_vibrate = self.ui_vibrate;
+        let prev_hub = self.show_control_hub;
         let prev_auto_jump = self.auto_jump;
-        let prev_zero_latency = self.zero_latency_touch;
         let mut loaded = Self::load_preset(game_home, style, id);
         let clean = loaded.preset_id.clone();
         loaded.active_mcpe_preset = if style == ControlStyle::Mcpe {
@@ -1267,8 +1268,9 @@ impl Settings {
         loaded.virtual_mouse_sensitivity = prev_vm_sens;
         loaded.virtual_mouse_pointer_scale = prev_pointer_scale;
         loaded.vibrate = prev_vibrate;
+        loaded.ui_vibrate = prev_ui_vibrate;
+        loaded.show_control_hub = prev_hub;
         loaded.auto_jump = prev_auto_jump;
-        loaded.zero_latency_touch = prev_zero_latency;
         *self = loaded;
         let _ = self.save_to(&game_home.join("horizon-touch.json"));
     }
@@ -1303,8 +1305,9 @@ impl Settings {
         let prev_vm_sens = self.virtual_mouse_sensitivity;
         let prev_pointer_scale = self.virtual_mouse_pointer_scale;
         let prev_vibrate = self.vibrate;
+        let prev_ui_vibrate = self.ui_vibrate;
+        let prev_hub = self.show_control_hub;
         let prev_auto_jump = self.auto_jump;
-        let prev_zero_latency = self.zero_latency_touch;
         let mut loaded = Self::load_preset(game_home, target, &target_preset_id);
         loaded.control_style = target;
         loaded.active_mcpe_preset = prev_mcpe;
@@ -1315,8 +1318,9 @@ impl Settings {
         loaded.virtual_mouse_sensitivity = prev_vm_sens;
         loaded.virtual_mouse_pointer_scale = prev_pointer_scale;
         loaded.vibrate = prev_vibrate;
+        loaded.ui_vibrate = prev_ui_vibrate;
+        loaded.show_control_hub = prev_hub;
         loaded.auto_jump = prev_auto_jump;
-        loaded.zero_latency_touch = prev_zero_latency;
         *self = loaded;
         let _ = self.save_to(&game_home.join("horizon-touch.json"));
     }
@@ -1387,209 +1391,6 @@ impl Settings {
         self.save_to(&game_home.join("horizon-touch.json"))?;
         Ok(PresetMeta {
             id: new_id,
-            name: display_name,
-            description: display_desc,
-            system: style,
-            is_default: false,
-        })
-    }
-
-    /// Finds an existing user preset in `style` with the same name (case-insensitive) or sanitized ID.
-    pub fn find_preset_by_name(
-        game_home: &std::path::Path,
-        style: ControlStyle,
-        desired_name: &str,
-    ) -> Option<PresetMeta> {
-        let trimmed = desired_name.trim();
-        if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("default") {
-            return None;
-        }
-        let clean = Self::sanitize_profile_name(trimmed);
-        Self::list_presets(game_home, style)
-            .into_iter()
-            .find(|p| !p.is_default && (p.name.trim().eq_ignore_ascii_case(trimmed) || p.id == clean))
-    }
-
-    /// Saves the current layout under `name`, replacing the existing preset if one with the same
-    /// name already exists (so duplicate preset names are never created).
-    pub fn save_or_replace_preset_by_name(
-        &mut self,
-        game_home: &std::path::Path,
-        name: &str,
-        description: &str,
-    ) -> std::io::Result<PresetMeta> {
-        let style = self.control_style;
-        if let Some(existing) = Self::find_preset_by_name(game_home, style, name) {
-            let display_name: String = name.trim().chars().take(48).collect();
-            let display_desc: String = if description.trim().is_empty() {
-                existing.description.clone()
-            } else {
-                description.trim().chars().take(120).collect()
-            };
-            self.preset_id = existing.id.clone();
-            self.active_profile = existing.id.clone();
-            self.preset_name = display_name.clone();
-            self.preset_description = display_desc.clone();
-            match style {
-                ControlStyle::Mcpe => self.active_mcpe_preset = existing.id.clone(),
-                ControlStyle::GoyControl => self.active_goy_preset = existing.id.clone(),
-            }
-            self.sanitize();
-            let target = Self::system_dir(game_home, style).join(format!("{}.json", existing.id));
-            self.save_to(&target)?;
-            self.save_to(&game_home.join("horizon-touch.json"))?;
-            return Ok(PresetMeta {
-                id: existing.id,
-                name: display_name,
-                description: display_desc,
-                system: style,
-                is_default: false,
-            });
-        }
-        self.save_new_preset(game_home, name, description)
-    }
-
-    /// Copies `source_id` to `new_name`, replacing an existing preset with the same name if confirmed.
-    pub fn copy_or_replace_preset_by_name(
-        game_home: &std::path::Path,
-        style: ControlStyle,
-        source_id: &str,
-        new_name: &str,
-        new_description: &str,
-    ) -> std::io::Result<PresetMeta> {
-        if let Some(existing) = Self::find_preset_by_name(game_home, style, new_name) {
-            let display_name: String = new_name.trim().chars().take(48).collect();
-            let display_desc: String = if new_description.trim().is_empty() {
-                existing.description.clone()
-            } else {
-                new_description.trim().chars().take(120).collect()
-            };
-            let mut duplicated = Self::load_preset(game_home, style, source_id);
-            duplicated.control_style = style;
-            duplicated.preset_id = existing.id.clone();
-            duplicated.active_profile = existing.id.clone();
-            duplicated.preset_name = display_name.clone();
-            duplicated.preset_description = display_desc.clone();
-            match style {
-                ControlStyle::Mcpe => duplicated.active_mcpe_preset = existing.id.clone(),
-                ControlStyle::GoyControl => duplicated.active_goy_preset = existing.id.clone(),
-            }
-            duplicated.sanitize();
-            let target = Self::system_dir(game_home, style).join(format!("{}.json", existing.id));
-            duplicated.save_to(&target)?;
-            return Ok(PresetMeta {
-                id: existing.id,
-                name: display_name,
-                description: display_desc,
-                system: style,
-                is_default: false,
-            });
-        }
-        Self::copy_preset(game_home, style, source_id, new_name, new_description)
-    }
-
-    /// Automatically detects whether a JSON control file belongs to `MCPE` or `GoyControl`.
-    pub fn detect_control_style(value: &serde_json::Value, parsed: &Self) -> ControlStyle {
-        if let Some(raw_style) = value.get("control_style").and_then(|v| v.as_str()) {
-            if raw_style.eq_ignore_ascii_case("goy-control")
-                || raw_style.eq_ignore_ascii_case("goycontrol")
-            {
-                return ControlStyle::GoyControl;
-            }
-            if raw_style.eq_ignore_ascii_case("mcpe") {
-                return ControlStyle::Mcpe;
-            }
-        }
-        let has_goy_features = parsed.custom_buttons.iter().any(|b| {
-            !b.second_key.is_empty()
-                || !b.third_key.is_empty()
-                || b.layouts.iter().any(|p| p.use_goy_style)
-        }) || parsed.button_visibility[Control::Jump as usize] == 2;
-        if has_goy_features {
-            ControlStyle::GoyControl
-        } else {
-            parsed.control_style
-        }
-    }
-
-    /// Detects the control system (`MCPE` vs `GoyControl`) of an imported control JSON buffer,
-    /// saves it in the proper directory (`controls/mcpe/` or `controls/goycontrol/`), and activates it.
-    pub fn detect_and_import_preset(
-        game_home: &std::path::Path,
-        bytes: &[u8],
-        file_name: &str,
-    ) -> std::result::Result<PresetMeta, String> {
-        let value: serde_json::Value = serde_json::from_slice(bytes)
-            .map_err(|e| format!("Invalid control JSON file: {e}"))?;
-        let mut parsed: Self = serde_json::from_value(value.clone())
-            .map_err(|e| format!("Unrecognized control preset format: {e}"))?;
-        let style = Self::detect_control_style(&value, &parsed);
-        Self::ensure_system_storage(game_home, style);
-
-        let stem = file_name
-            .trim()
-            .strip_suffix(".json")
-            .unwrap_or(file_name.trim())
-            .strip_prefix("horizon-controls-")
-            .unwrap_or(
-                file_name
-                    .trim()
-                    .strip_suffix(".json")
-                    .unwrap_or(file_name.trim()),
-            );
-        let raw_name = if !parsed.preset_name.trim().is_empty()
-            && !parsed.preset_name.trim().eq_ignore_ascii_case("default")
-        {
-            parsed.preset_name.trim().to_owned()
-        } else if !stem.trim().is_empty() && !stem.trim().eq_ignore_ascii_case("default") {
-            stem.trim().replace('-', " ")
-        } else {
-            format!("Imported {}", style.label())
-        };
-        let display_name: String = raw_name.chars().take(48).collect();
-        let display_desc: String = if parsed.preset_description.trim().is_empty()
-            || parsed.preset_description == default_mcpe_preset_desc()
-            || parsed.preset_description == default_goy_preset_desc()
-        {
-            format!("Imported {} control preset", style.label())
-        } else {
-            parsed.preset_description.trim().chars().take(120).collect()
-        };
-
-        let target_id = if let Some(existing) = Self::find_preset_by_name(game_home, style, &display_name) {
-            existing.id
-        } else {
-            Self::allocate_unique_preset_id(game_home, style, &display_name)
-        };
-
-        parsed.control_style = style;
-        parsed.preset_id = target_id.clone();
-        parsed.active_profile = target_id.clone();
-        parsed.preset_name = display_name.clone();
-        parsed.preset_description = display_desc.clone();
-
-        let current_touch_path = game_home.join("horizon-touch.json");
-        let prev = Self::load_from(&current_touch_path);
-        parsed.active_mcpe_preset = if style == ControlStyle::Mcpe {
-            target_id.clone()
-        } else {
-            prev.active_mcpe_preset
-        };
-        parsed.active_goy_preset = if style == ControlStyle::GoyControl {
-            target_id.clone()
-        } else {
-            prev.active_goy_preset
-        };
-        parsed.sanitize();
-
-        let dest = Self::system_dir(game_home, style).join(format!("{target_id}.json"));
-        parsed.save_to(&dest).map_err(|e| e.to_string())?;
-        parsed
-            .save_to(&current_touch_path)
-            .map_err(|e| e.to_string())?;
-
-        Ok(PresetMeta {
-            id: target_id,
             name: display_name,
             description: display_desc,
             system: style,
@@ -1680,7 +1481,6 @@ impl Settings {
                 key: k1.into(),
                 second_key: k2.into(),
                 third_key: String::new(),
-                fourth_key: String::new(),
                 custom_label: label.into(),
                 always_visible: in_menu,
                 layouts: [p; 3],
@@ -1985,8 +1785,9 @@ impl Settings {
             let prev_vm_sens = self.virtual_mouse_sensitivity;
             let prev_pointer_scale = self.virtual_mouse_pointer_scale;
             let prev_vibrate = self.vibrate;
+            let prev_ui_vibrate = self.ui_vibrate;
+            let prev_hub = self.show_control_hub;
             let prev_auto_jump = self.auto_jump;
-            let prev_zero_latency = self.zero_latency_touch;
             *self = Self::default_for_style(style);
             self.active_mcpe_preset = prev_mcpe;
             self.active_goy_preset = prev_goy;
@@ -1996,8 +1797,9 @@ impl Settings {
             self.virtual_mouse_sensitivity = prev_vm_sens;
             self.virtual_mouse_pointer_scale = prev_pointer_scale;
             self.vibrate = prev_vibrate;
+            self.ui_vibrate = prev_ui_vibrate;
+            self.show_control_hub = prev_hub;
             self.auto_jump = prev_auto_jump;
-            self.zero_latency_touch = prev_zero_latency;
             match style {
                 ControlStyle::Mcpe => self.active_mcpe_preset = "default".into(),
                 ControlStyle::GoyControl => self.active_goy_preset = "default".into(),
@@ -2032,8 +1834,9 @@ impl Settings {
         loaded.virtual_mouse_sensitivity = active.virtual_mouse_sensitivity;
         loaded.virtual_mouse_pointer_scale = active.virtual_mouse_pointer_scale;
         loaded.vibrate = active.vibrate;
+        loaded.ui_vibrate = active.ui_vibrate;
+        loaded.show_control_hub = active.show_control_hub;
         loaded.auto_jump = active.auto_jump;
-        loaded.zero_latency_touch = active.zero_latency_touch;
         match loaded.control_style {
             ControlStyle::Mcpe => loaded.active_mcpe_preset = loaded.preset_id.clone(),
             ControlStyle::GoyControl => loaded.active_goy_preset = loaded.preset_id.clone(),
@@ -2043,7 +1846,7 @@ impl Settings {
     }
     pub fn export_profile(
         &self,
-        _root_home: &std::path::Path,
+        root_home: &std::path::Path,
         game_home: &std::path::Path,
         name: &str,
     ) -> std::io::Result<std::path::PathBuf> {
@@ -2051,16 +1854,14 @@ impl Settings {
         if clean != "default" {
             let _ = self.save_profile(game_home, &clean);
         }
-        let dir = Self::system_dir(game_home, self.control_style);
-        std::fs::create_dir_all(&dir)?;
-        let exported = dir.join(format!("{clean}.json"));
+        let reports = root_home.join("performance");
+        std::fs::create_dir_all(&reports)?;
+        let exported = reports.join(format!("horizon-controls-{clean}.json"));
         self.save_to(&exported)?;
         Ok(exported)
     }
     pub fn crosshair(&self) -> bool {
-        self.control_style == ControlStyle::GoyControl
-            || self.mode == Mode::Crosshair
-            || self.split_controls
+        self.mode == Mode::Crosshair || self.split_controls
     }
     /// Toggles split-touch (crosshair aiming vs tap-anywhere interaction) across all movement modes.
     pub fn toggle_split_touch(&mut self) {
@@ -2095,14 +1896,6 @@ impl Settings {
             _ => true,
         }
     }
-    pub fn control_label(&self, c: Control) -> &str {
-        let custom = self.control_labels[c as usize].trim();
-        if custom.is_empty() {
-            c.name()
-        } else {
-            custom
-        }
-    }
     pub fn slot(&self, c: Control) -> usize {
         match c {
             Control::Jump if self.mode == Mode::Dpad && self.swap_jump_sneak => {
@@ -2128,6 +1921,30 @@ pub fn contains([x, y, w, h]: [f32; 4], p: [f32; 2]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn legacy_feedback_and_hub_preferences_migrate_and_roundtrip() {
+        let mut legacy = serde_json::to_value(Settings::default()).unwrap();
+        let fields = legacy.as_object_mut().unwrap();
+        for name in ["ui_vibrate", "show_control_hub", "classic_control_hub"] {
+            fields.remove(name);
+        }
+        fields.insert("floating_menu_pos".into(), serde_json::json!([0.44, 0.05]));
+        fields.insert("vibrate".into(), serde_json::json!(false));
+        let mut settings: Settings = serde_json::from_value(legacy).unwrap();
+        settings.sanitize();
+        assert!(!settings.ui_vibrate);
+        assert!(!settings.vibrate);
+        assert!(settings.show_control_hub);
+        assert_eq!(settings.floating_menu_pos, [0.44, 0.05]);
+        settings.ui_vibrate = true;
+        settings.show_control_hub = false;
+        let restored: Settings =
+            serde_json::from_value(serde_json::to_value(&settings).unwrap()).unwrap();
+        assert!(restored.ui_vibrate);
+        assert!(!restored.vibrate);
+        assert!(!restored.show_control_hub);
+    }
+
     #[test]
     fn gyro_preferences_roundtrip_and_reject_bad_values() {
         let mut s = super::Settings::default();
@@ -2395,7 +2212,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
 
         let mut settings = Settings::default();
-        assert!(settings.virtual_mouse_enabled);
         settings.virtual_mouse_enabled = false;
         settings.virtual_mouse_sensitivity = 1.75;
         settings.virtual_mouse_pointer_scale = 1.6;

@@ -96,14 +96,6 @@ pub struct Editor {
     pub save_create_new_mode: bool,
     /// True when the Back confirmation dialog (`[ Save ]` / `[ Back ]`) is open.
     pub back_confirm_open: bool,
-    /// True when the Duplicate Preset Name Confirmation dialog (`[ Save ]` / `[ Cancel ]`) is open.
-    pub duplicate_name_confirm_open: bool,
-    /// Pending `(target_id, name, description)` when replacing an existing preset with the same name.
-    pub duplicate_conflict_target: Option<(String, String, String)>,
-    /// True when the user is typing a custom button name in the Property Inspector.
-    pub editing_button_label: bool,
-    /// Buffer for the custom button name being typed.
-    pub button_label_input: String,
 }
 
 enum Drag {
@@ -155,11 +147,13 @@ impl TouchControls {
             keyboard_request: false,
             save_create_new_mode: is_default,
             back_confirm_open: false,
-            duplicate_name_confirm_open: false,
-            duplicate_conflict_target: None,
-            editing_button_label: false,
-            button_label_input: String::new(),
         });
+    }
+    pub fn cancel_editor_gesture(&mut self) {
+        if let Some(editor) = &mut self.editor {
+            editor.drag = None;
+            editor.active_drag = None;
+        }
     }
     pub fn cancel_editor(&mut self) {
         if let Some(e) = self.editor.take() {
@@ -190,11 +184,6 @@ impl TouchControls {
         }
         if e.menu_open {
             e.menu_open = false;
-            return false;
-        }
-        if e.duplicate_name_confirm_open {
-            e.duplicate_name_confirm_open = false;
-            e.duplicate_conflict_target = None;
             return false;
         }
         if e.save_dialog_open {
@@ -737,9 +726,6 @@ impl TouchControls {
                         if mirror {
                             center[0] = 1.0 - center[0];
                         }
-                        if self.settings.snap_to_grid {
-                            center = center.map(|v| (v * 40.0).round() / 40.0);
-                        }
                         let size = (place.size * scale).min(aspect).min(1.0);
                         place.center = [
                             center[0].clamp(size / aspect / 2.0, 1.0 - size / aspect / 2.0),
@@ -971,4 +957,32 @@ impl TouchControls {
 }
 fn key_rect(i: usize) -> [f32; 4] {
     [0.15, 0.25 + i as f32 * 0.072, 0.7, 0.06]
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+    #[test]
+    fn interrupted_drag_preserves_editor_changes_and_does_not_accept_picker() {
+        let mut tc = TouchControls::default();
+        tc.open_editor();
+        tc.settings.left_handed = !tc.settings.left_handed;
+        let expected = tc.settings.clone();
+        let ed = tc.editor.as_mut().unwrap();
+        ed.picker_step = PickerStep::Keyboard { event_slot: 0 };
+        ed.active_drag = Some((
+            7,
+            EditorDragKind::KeyboardScroll {
+                last_x: 0.0,
+                moved: false,
+            },
+        ));
+        tc.clear();
+        assert_eq!(tc.settings, expected);
+        let ed = tc.editor.as_ref().unwrap();
+        assert!(ed.active_drag.is_none());
+        assert_eq!(ed.picker_step, PickerStep::Keyboard { event_slot: 0 });
+        tc.cancel_editor();
+        assert_ne!(tc.settings.left_handed, expected.left_handed);
+    }
 }
